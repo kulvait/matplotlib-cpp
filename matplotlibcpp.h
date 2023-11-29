@@ -359,10 +359,24 @@ inline bool annotate(std::string annotation, double x, double y)
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
 
-    if(res)
+    if(res != nullptr)
+    {
         Py_XDECREF(res);
+        return true;
+    } else
+    {
+        return false;
+    }
+}
 
-    return res;
+PyObject* parseKwargs(const std::map<std::string, std::string>& keywords)
+{
+    PyObject* kwargs = PyDict_New();
+    for(const auto& it : keywords)
+    {
+        PyDict_SetItemString(kwargs, it.first.c_str(), PyString_FromString(it.second.c_str()));
+    }
+    return kwargs;
 }
 
 namespace detail {
@@ -529,6 +543,7 @@ bool plot(const std::vector<Numeric>& x,
           const std::vector<Numeric>& y,
           const std::map<std::string, std::string>& keywords)
 {
+    PyErr_Clear();
     assert(x.size() == y.size());
 
     detail::_interpreter::get();
@@ -543,21 +558,22 @@ bool plot(const std::vector<Numeric>& x,
     PyTuple_SetItem(args, 1, yarray);
 
     // construct keyword args
-    PyObject* kwargs = PyDict_New();
-    for(std::map<std::string, std::string>::const_iterator it = keywords.begin();
-        it != keywords.end(); ++it)
-    {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyString_FromString(it->second.c_str()));
-    }
+    PyObject* kwargs = parseKwargs(keywords);
 
     PyObject* res = PyObject_Call(detail::_interpreter::get().s_python_function_plot, args, kwargs);
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    if(res)
-        Py_XDECREF(res);
-
-    return res;
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+        return true;
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to plot() failed.\n");
+        PyErr_Print();
+        return false;
+    }
 }
 
 // TODO - it should be possible to make this work by implementing
@@ -657,7 +673,7 @@ void plot_surface(const std::vector<::std::vector<Numeric>>& x,
     }
     Py_XDECREF(fig_exists);
     if(!fig)
-        throw std::runtime_error("Call to figure() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure() failed.");
 
     PyObject* gca_kwargs = PyDict_New();
     PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
@@ -698,6 +714,7 @@ void contour(const std::vector<::std::vector<Numeric>>& x,
              const std::vector<::std::vector<Numeric>>& z,
              const std::map<std::string, std::string>& keywords = {})
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     // using numpy arrays
@@ -727,13 +744,16 @@ void contour(const std::vector<::std::vector<Numeric>>& x,
 
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_contour, args, kwargs);
-    if(!res)
-        throw std::runtime_error("failed contour");
-
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    if(res)
-        Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to contour() failed.\n");
+        PyErr_Print();
+    }
 }
 
 template <typename Numeric>
@@ -846,7 +866,7 @@ void plot3(const std::vector<Numeric>& x,
         fig = PyObject_CallObject(detail::_interpreter::get().s_python_function_figure, fig_args);
     }
     if(!fig)
-        throw std::runtime_error("Call to figure() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure() failed.");
 
     PyObject* gca_kwargs = PyDict_New();
     PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
@@ -886,6 +906,7 @@ bool stem(const std::vector<Numeric>& x,
           const std::vector<Numeric>& y,
           const std::map<std::string, std::string>& keywords)
 {
+    PyErr_Clear();
     assert(x.size() == y.size());
 
     detail::_interpreter::get();
@@ -900,21 +921,22 @@ bool stem(const std::vector<Numeric>& x,
     PyTuple_SetItem(args, 1, yarray);
 
     // construct keyword args
-    PyObject* kwargs = PyDict_New();
-    for(std::map<std::string, std::string>::const_iterator it = keywords.begin();
-        it != keywords.end(); ++it)
-    {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyString_FromString(it->second.c_str()));
-    }
+    PyObject* kwargs = parseKwargs(keywords);
 
     PyObject* res = PyObject_Call(detail::_interpreter::get().s_python_function_stem, args, kwargs);
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    if(res)
-        Py_XDECREF(res);
-
-    return res;
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+        return true;
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to stem() failed.\n");
+        PyErr_Print();
+        return false;
+    }
 }
 
 template <typename Numeric>
@@ -1099,7 +1121,7 @@ namespace detail {
         Py_XDECREF(args);
         Py_XDECREF(kwargs);
         if(!res)
-            throw std::runtime_error("Call to imshow() failed");
+            throw std::runtime_error("matplotlib.h: Call to imshow() failed");
         if(out)
             *out = res;
         else
@@ -1162,16 +1184,6 @@ void imshow(const cv::Mat& image, const std::map<std::string, std::string>& keyw
 #endif // WITH_OPENCV
 #endif // WITHOUT_NUMPY
 
-PyObject* parseKwargs(const std::map<std::string, std::string>& keywords)
-{
-    PyObject* kwargs = PyDict_New();
-    for(const auto& it : keywords)
-    {
-        PyDict_SetItemString(kwargs, it.first.c_str(), PyString_FromString(it.second.c_str()));
-    }
-    return kwargs;
-}
-
 template <typename NumericX, typename NumericY>
 bool scatter(const std::vector<NumericX>& x,
              const std::vector<NumericY>& y,
@@ -1204,7 +1216,7 @@ bool scatter(const std::vector<NumericX>& x,
         return true;
     } else
     {
-        fprintf(stderr, "Call to scatter() failed.");
+        fprintf(stderr, "matplotlib.h: Call to scatter() failed.\n");
         PyErr_Print();
         return false;
     }
@@ -1245,7 +1257,7 @@ bool scatter_colored(const std::vector<NumericX>& x,
         return true;
     } else
     {
-        fprintf(stderr, "Call to scatter() failed.");
+        fprintf(stderr, "matplotlib.h: Call to scatter() failed.\n");
         PyErr_Print();
         return false;
     }
@@ -1328,7 +1340,7 @@ bool scatter(const std::vector<NumericX>& x,
     }
     Py_XDECREF(fig_exists);
     if(!fig)
-        throw std::runtime_error("Call to figure() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure() failed.");
 
     PyObject* gca_kwargs = PyDict_New();
     PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
@@ -1763,7 +1775,7 @@ bool quiver(const std::vector<NumericX>& x,
     PyObject* fig = PyObject_CallObject(detail::_interpreter::get().s_python_function_figure,
                                         detail::_interpreter::get().s_python_empty_tuple);
     if(!fig)
-        throw std::runtime_error("Call to figure() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure() failed.");
 
     PyObject* gca_kwargs = PyDict_New();
     PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
@@ -1950,7 +1962,7 @@ bool errorbar(const std::vector<NumericX>& x,
     if(res)
         Py_XDECREF(res);
     else
-        throw std::runtime_error("Call to errorbar() failed.");
+        throw std::runtime_error("matplotlib.h: Call to errorbar() failed.");
 
     return res;
 }
@@ -2151,7 +2163,7 @@ void text(Numeric x, Numeric y, const std::string& s = "")
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_text, args);
     if(!res)
-        throw std::runtime_error("Call to text() failed.");
+        throw std::runtime_error("matplotlib.h: Call to text() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2178,7 +2190,7 @@ inline void colorbar(PyObject* mappable = NULL, const std::map<std::string, floa
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_colorbar, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to colorbar() failed.");
+        throw std::runtime_error("matplotlib.h: Call to colorbar() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
@@ -2207,7 +2219,7 @@ inline long figure(long number = -1)
     }
 
     if(!res)
-        throw std::runtime_error("Call to figure() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure() failed.");
 
     PyObject* num = PyObject_GetAttrString(res, "number");
     if(!num)
@@ -2229,7 +2241,7 @@ inline bool fignum_exists(long number)
     PyObject* res
         = PyObject_CallObject(detail::_interpreter::get().s_python_function_fignum_exists, args);
     if(!res)
-        throw std::runtime_error("Call to fignum_exists() failed.");
+        throw std::runtime_error("matplotlib.h: Call to fignum_exists() failed.");
 
     bool ret = PyObject_IsTrue(res);
     Py_XDECREF(res);
@@ -2257,24 +2269,30 @@ inline void figure_size(size_t w, size_t h)
     Py_XDECREF(kwargs);
 
     if(!res)
-        throw std::runtime_error("Call to figure_size() failed.");
+        throw std::runtime_error("matplotlib.h: Call to figure_size() failed.");
     Py_XDECREF(res);
 }
 
 inline void legend()
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_legend,
                                         detail::_interpreter::get().s_python_empty_tuple);
-    if(!res)
-        throw std::runtime_error("Call to legend() failed.");
-
-    Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to legend() failed.");
+        PyErr_Print();
+    }
 }
 
 inline void legend(const std::map<std::string, std::string>& keywords)
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     // construct keyword args
@@ -2287,11 +2305,15 @@ inline void legend(const std::map<std::string, std::string>& keywords)
 
     PyObject* res = PyObject_Call(detail::_interpreter::get().s_python_function_legend,
                                   detail::_interpreter::get().s_python_empty_tuple, kwargs);
-    if(!res)
-        throw std::runtime_error("Call to legend() failed.");
-
     Py_XDECREF(kwargs);
-    Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to legend() failed.");
+        PyErr_Print();
+    }
 }
 
 template <typename Numeric>
@@ -2306,7 +2328,7 @@ inline void set_aspect(Numeric ratio)
     PyObject* ax = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
                                        detail::_interpreter::get().s_python_empty_tuple);
     if(!ax)
-        throw std::runtime_error("Call to gca() failed.");
+        throw std::runtime_error("matplotlib.h: Call to gca() failed.");
     Py_INCREF(ax);
 
     PyObject* set_aspect = PyObject_GetAttrString(ax, "set_aspect");
@@ -2316,7 +2338,7 @@ inline void set_aspect(Numeric ratio)
 
     PyObject* res = PyObject_Call(set_aspect, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to set_aspect() failed.");
+        throw std::runtime_error("matplotlib.h: Call to set_aspect() failed.");
     Py_XDECREF(set_aspect);
 
     Py_XDECREF(ax);
@@ -2336,7 +2358,7 @@ inline void set_aspect_equal()
     PyObject* ax = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
                                        detail::_interpreter::get().s_python_empty_tuple);
     if(!ax)
-        throw std::runtime_error("Call to gca() failed.");
+        throw std::runtime_error("matplotlib.h: Call to gca() failed.");
     Py_INCREF(ax);
 
     PyObject* set_aspect = PyObject_GetAttrString(ax, "set_aspect");
@@ -2346,7 +2368,7 @@ inline void set_aspect_equal()
 
     PyObject* res = PyObject_Call(set_aspect, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to set_aspect() failed.");
+        throw std::runtime_error("matplotlib.h: Call to set_aspect() failed.");
     Py_XDECREF(set_aspect);
 
     Py_XDECREF(ax);
@@ -2368,7 +2390,7 @@ void ylim(Numeric left, Numeric right)
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_ylim, args);
     if(!res)
-        throw std::runtime_error("Call to ylim() failed.");
+        throw std::runtime_error("matplotlib.h: Call to ylim() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2388,7 +2410,7 @@ void xlim(Numeric left, Numeric right)
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_xlim, args);
     if(!res)
-        throw std::runtime_error("Call to xlim() failed.");
+        throw std::runtime_error("matplotlib.h: Call to xlim() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2400,7 +2422,7 @@ inline std::array<double, 2> xlim()
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_xlim, args);
 
     if(!res)
-        throw std::runtime_error("Call to xlim() failed.");
+        throw std::runtime_error("matplotlib.h: Call to xlim() failed.");
 
     Py_XDECREF(res);
 
@@ -2415,7 +2437,7 @@ inline std::array<double, 2> ylim()
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_ylim, args);
 
     if(!res)
-        throw std::runtime_error("Call to ylim() failed.");
+        throw std::runtime_error("matplotlib.h: Call to ylim() failed.");
 
     Py_XDECREF(res);
 
@@ -2469,7 +2491,7 @@ inline void xticks(const std::vector<Numeric>& ticks,
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
     if(!res)
-        throw std::runtime_error("Call to xticks() failed");
+        throw std::runtime_error("matplotlib.h: Call to xticks() failed");
 
     Py_XDECREF(res);
 }
@@ -2526,7 +2548,7 @@ inline void yticks(const std::vector<Numeric>& ticks,
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
     if(!res)
-        throw std::runtime_error("Call to yticks() failed");
+        throw std::runtime_error("matplotlib.h: Call to yticks() failed");
 
     Py_XDECREF(res);
 }
@@ -2548,7 +2570,7 @@ inline void margins(Numeric margin)
     PyObject* res
         = PyObject_CallObject(detail::_interpreter::get().s_python_function_margins, args);
     if(!res)
-        throw std::runtime_error("Call to margins() failed.");
+        throw std::runtime_error("matplotlib.h: Call to margins() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2565,7 +2587,7 @@ inline void margins(Numeric margin_x, Numeric margin_y)
     PyObject* res
         = PyObject_CallObject(detail::_interpreter::get().s_python_function_margins, args);
     if(!res)
-        throw std::runtime_error("Call to margins() failed.");
+        throw std::runtime_error("matplotlib.h: Call to margins() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2595,7 +2617,7 @@ inline void tick_params(const std::map<std::string, std::string>& keywords,
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
     if(!res)
-        throw std::runtime_error("Call to tick_params() failed");
+        throw std::runtime_error("matplotlib.h: Call to tick_params() failed");
 
     Py_XDECREF(res);
 }
@@ -2613,7 +2635,7 @@ inline void subplot(long nrows, long ncols, long plot_number)
     PyObject* res
         = PyObject_CallObject(detail::_interpreter::get().s_python_function_subplot, args);
     if(!res)
-        throw std::runtime_error("Call to subplot() failed.");
+        throw std::runtime_error("matplotlib.h: Call to subplot() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2641,7 +2663,7 @@ inline void subplot2grid(
     PyObject* res
         = PyObject_CallObject(detail::_interpreter::get().s_python_function_subplot2grid, args);
     if(!res)
-        throw std::runtime_error("Call to subplot2grid() failed.");
+        throw std::runtime_error("matplotlib.h: Call to subplot2grid() failed.");
 
     Py_XDECREF(shape);
     Py_XDECREF(loc);
@@ -2667,7 +2689,7 @@ inline void title(const std::string& titlestr,
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_title, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to title() failed.");
+        throw std::runtime_error("matplotlib.h: Call to title() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
@@ -2692,7 +2714,7 @@ inline void suptitle(const std::string& suptitlestr,
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_suptitle, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to suptitle() failed.");
+        throw std::runtime_error("matplotlib.h: Call to suptitle() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
@@ -2709,7 +2731,7 @@ inline void axis(const std::string& axisstr)
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_axis, args);
     if(!res)
-        throw std::runtime_error("Call to title() failed.");
+        throw std::runtime_error("matplotlib.h: Call to title() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2819,50 +2841,53 @@ inline void axvspan(double xmin,
 
 inline void xlabel(const std::string& str, const std::map<std::string, std::string>& keywords = {})
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     PyObject* pystr = PyString_FromString(str.c_str());
     PyObject* args = PyTuple_New(1);
     PyTuple_SetItem(args, 0, pystr);
 
-    PyObject* kwargs = PyDict_New();
-    for(auto it = keywords.begin(); it != keywords.end(); ++it)
-    {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
-    }
+    PyObject* kwargs = parseKwargs(keywords);
 
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_xlabel, args, kwargs);
-    if(!res)
-        throw std::runtime_error("Call to xlabel() failed.");
-
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to xlabel() failed.\n");
+        PyErr_Print();
+    }
 }
 
 inline void ylabel(const std::string& str, const std::map<std::string, std::string>& keywords = {})
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     PyObject* pystr = PyString_FromString(str.c_str());
     PyObject* args = PyTuple_New(1);
     PyTuple_SetItem(args, 0, pystr);
 
-    PyObject* kwargs = PyDict_New();
-    for(auto it = keywords.begin(); it != keywords.end(); ++it)
-    {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
-    }
+    PyObject* kwargs = parseKwargs(keywords);
 
     PyObject* res
         = PyObject_Call(detail::_interpreter::get().s_python_function_ylabel, args, kwargs);
-    if(!res)
-        throw std::runtime_error("Call to ylabel() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to ylabel() failed.\n");
+        PyErr_Print();
+    }
 }
 
 inline void set_zlabel(const std::string& str,
@@ -2912,7 +2937,7 @@ inline void set_zlabel(const std::string& str,
     PyObject* ax = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
                                        detail::_interpreter::get().s_python_empty_tuple);
     if(!ax)
-        throw std::runtime_error("Call to gca() failed.");
+        throw std::runtime_error("matplotlib.h: Call to gca() failed.");
     Py_INCREF(ax);
 
     PyObject* zlabel = PyObject_GetAttrString(ax, "set_zlabel");
@@ -2922,7 +2947,7 @@ inline void set_zlabel(const std::string& str,
 
     PyObject* res = PyObject_Call(zlabel, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to set_zlabel() failed.");
+        throw std::runtime_error("matplotlib.h: Call to set_zlabel() failed.");
     Py_XDECREF(zlabel);
 
     Py_XDECREF(ax);
@@ -2944,7 +2969,7 @@ inline void grid(bool flag)
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_grid, args);
     if(!res)
-        throw std::runtime_error("Call to grid() failed.");
+        throw std::runtime_error("matplotlib.h: Call to grid() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -2969,11 +2994,10 @@ inline void show(const bool block = true)
     }
 
     if(!res)
-        throw std::runtime_error("Call to show() failed.");
+        throw std::runtime_error("matplotlib.h: Call to show() failed.");
 
     Py_XDECREF(res);
 }
-
 inline void close()
 {
     detail::_interpreter::get();
@@ -2982,7 +3006,7 @@ inline void close()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to close() failed.");
+        throw std::runtime_error("matplotlib.h: Call to close() failed.");
 
     Py_XDECREF(res);
 }
@@ -3000,7 +3024,7 @@ inline void xkcd()
     Py_XDECREF(kwargs);
 
     if(!res)
-        throw std::runtime_error("Call to show() failed.");
+        throw std::runtime_error("matplotlib.h: Call to show() failed.");
 
     Py_XDECREF(res);
 }
@@ -3013,7 +3037,7 @@ inline void draw()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to draw() failed.");
+        throw std::runtime_error("matplotlib.h: Call to draw() failed.");
 
     Py_XDECREF(res);
 }
@@ -3028,7 +3052,7 @@ inline void pause(Numeric interval)
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_pause, args);
     if(!res)
-        throw std::runtime_error("Call to pause() failed.");
+        throw std::runtime_error("matplotlib.h: Call to pause() failed.");
 
     Py_XDECREF(args);
     Py_XDECREF(res);
@@ -3036,6 +3060,7 @@ inline void pause(Numeric interval)
 
 inline void save(const std::string& filename, const int dpi = 0)
 {
+    PyErr_Clear();
     detail::_interpreter::get();
 
     PyObject* pyfilename = PyString_FromString(filename.c_str());
@@ -3051,12 +3076,16 @@ inline void save(const std::string& filename, const int dpi = 0)
     }
 
     PyObject* res = PyObject_Call(detail::_interpreter::get().s_python_function_save, args, kwargs);
-    if(!res)
-        throw std::runtime_error("Call to save() failed.");
-
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
-    Py_XDECREF(res);
+    if(res != nullptr)
+    {
+        Py_DECREF(res);
+    } else
+    {
+        fprintf(stderr, "matplotlib.h: Call to save() failed.\n");
+        PyErr_Print();
+    }
 }
 
 inline void rcparams(const std::map<std::string, std::string>& keywords = {})
@@ -3078,7 +3107,7 @@ inline void rcparams(const std::map<std::string, std::string>& keywords = {})
         = PyObject_GetAttrString(detail::_interpreter::get().s_python_function_rcparams, "update");
     PyObject* res = PyObject_Call(update, args, kwargs);
     if(!res)
-        throw std::runtime_error("Call to rcParams.update() failed.");
+        throw std::runtime_error("matplotlib.h: Call to rcParams.update() failed.");
     Py_XDECREF(args);
     Py_XDECREF(kwargs);
     Py_XDECREF(update);
@@ -3093,7 +3122,7 @@ inline void clf()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to clf() failed.");
+        throw std::runtime_error("matplotlib.h: Call to clf() failed.");
 
     Py_XDECREF(res);
 }
@@ -3106,7 +3135,7 @@ inline void cla()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to cla() failed.");
+        throw std::runtime_error("matplotlib.h: Call to cla() failed.");
 
     Py_XDECREF(res);
 }
@@ -3119,7 +3148,7 @@ inline void ion()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to ion() failed.");
+        throw std::runtime_error("matplotlib.h: Call to ion() failed.");
 
     Py_XDECREF(res);
 }
@@ -3146,7 +3175,7 @@ ginput(const int numClicks = 1, const std::map<std::string, std::string>& keywor
     Py_XDECREF(kwargs);
     Py_XDECREF(args);
     if(!res)
-        throw std::runtime_error("Call to ginput() failed.");
+        throw std::runtime_error("matplotlib.h: Call to ginput() failed.");
 
     const size_t len = PyList_Size(res);
     std::vector<std::array<double, 2>> out;
@@ -3173,7 +3202,7 @@ inline void tight_layout()
                                         detail::_interpreter::get().s_python_empty_tuple);
 
     if(!res)
-        throw std::runtime_error("Call to tight_layout() failed.");
+        throw std::runtime_error("matplotlib.h: Call to tight_layout() failed.");
 
     Py_XDECREF(res);
 }
@@ -3225,8 +3254,8 @@ namespace detail {
     template <typename T>
     struct is_callable
     {
-        // dispatch to is_callable_impl<true, T> or is_callable_impl<false, T> depending on whether
-        // T is of class type or not
+        // dispatch to is_callable_impl<true, T> or is_callable_impl<false, T> depending on
+        // whether T is of class type or not
         typedef typename is_callable_impl<std::is_class<T>::value, T>::type type;
     };
 
@@ -3336,7 +3365,8 @@ inline bool plot(const std::vector<double>& x,
 }
 
 /*
- * This class allows dynamic plots, ie changing the plotted data without clearing and re-plotting
+ * This class allows dynamic plots, ie changing the plotted data without clearing and
+ * re-plotting
  */
 class Plot
 {
