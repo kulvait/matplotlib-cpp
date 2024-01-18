@@ -369,7 +369,14 @@ inline bool annotate(std::string annotation, double x, double y)
     }
 }
 
-PyObject* parseKwargs(const std::map<std::string, std::string>& keywords)
+/**
+* @brief Make kwargs object from std::map<std::string, std::string>& keywords
+*
+* @param keywords additional kwargs to Python function call
+*
+* @return kwargs PyDict object
+*/
+inline PyObject* parseKwargs(const std::map<std::string, std::string>& keywords)
 {
     PyObject* kwargs = PyDict_New();
     for(const auto& it : keywords)
